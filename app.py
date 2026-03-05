@@ -126,6 +126,19 @@ def init_db():
             department TEXT,
             model TEXT,
             serial_number TEXT,
+            brand TEXT,
+            manufacturer TEXT,
+            cpu_model TEXT,
+            ram_spec TEXT,
+            storage_spec TEXT,
+            gpu_model TEXT,
+            network_card TEXT,
+            monitor TEXT,
+            monitor_quantity INTEGER NOT NULL DEFAULT 1,
+            os_name TEXT,
+            os_version TEXT,
+            mac_address TEXT,
+            physical_location TEXT,
             status TEXT NOT NULL,
             notes TEXT,
             updated_at TEXT NOT NULL
@@ -312,6 +325,7 @@ def render_page(
     alert: str = "",
     can_manage_users: bool = False,
 ):
+    page_class = "page-" + "".join(ch.lower() if ch.isalnum() else "-" for ch in title).strip("-")
     nav = ""
     if username:
         nav = f"""
@@ -356,6 +370,21 @@ def render_page(
     nav .brand img {{ height:52px; width:auto; display:block; max-width:none; object-fit:contain; }}
     .container {{ max-width:1100px; margin:28px auto; padding:0 14px; }}
     .card {{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; box-shadow:0 10px 30px rgba(16,24,39,0.05); margin-bottom:16px; }}
+    .page-maquinas .card {{
+      border:1px solid #b6c7df;
+      border-radius:14px;
+      box-shadow:
+        0 16px 30px rgba(15, 23, 42, 0.12),
+        0 2px 0 rgba(255, 255, 255, 0.9) inset,
+        0 -2px 0 rgba(148, 163, 184, 0.35) inset,
+        2px 0 0 rgba(255, 255, 255, 0.65) inset,
+        -2px 0 0 rgba(148, 163, 184, 0.18) inset;
+      background:linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    }}
+    .page-maquinas .card h2 {{
+      padding-bottom:8px;
+      border-bottom:1px solid #d8e3f2;
+    }}
     h1,h2 {{ margin:0 0 12px; }}
     h1 {{ font-size:28px; }}
     h2 {{ font-size:20px; }}
@@ -424,7 +453,7 @@ def render_page(
     }}
   </style>
 </head>
-<body>
+<body class=\"{page_class}\">
   {nav}
   <main class=\"container\">{alert_html}{content}</main>
 </body>
@@ -479,6 +508,19 @@ def ensure_machine_schema(conn: sqlite3.Connection):
         "cooler_invoice": "TEXT",
         "memory_details": "TEXT",
         "hd_details": "TEXT",
+        "brand": "TEXT",
+        "manufacturer": "TEXT",
+        "cpu_model": "TEXT",
+        "ram_spec": "TEXT",
+        "storage_spec": "TEXT",
+        "gpu_model": "TEXT",
+        "network_card": "TEXT",
+        "monitor": "TEXT",
+        "monitor_quantity": "INTEGER NOT NULL DEFAULT 1",
+        "os_name": "TEXT",
+        "os_version": "TEXT",
+        "mac_address": "TEXT",
+        "physical_location": "TEXT",
     }
     for col_name, col_def in machine_migrations.items():
         if col_name not in existing_machine_cols:
@@ -572,6 +614,9 @@ def fetch_counts():
 
 
 def machine_storage_label(row: sqlite3.Row) -> str:
+    storage_spec = (row["storage_spec"] or "").strip()
+    if storage_spec:
+        return storage_spec
     hd_mech = (row["hd_model"] or "").strip()
     hd_nvme = (row["hd_nvme_model"] or "").strip()
     parts = []
@@ -584,11 +629,11 @@ def machine_storage_label(row: sqlite3.Row) -> str:
 
 def machine_report_status(row: sqlite3.Row) -> str:
     required = [
-        (row["motherboard_model"] or "").strip(),
-        (row["memory_model"] or "").strip(),
-        (row["psu_model"] or "").strip(),
+        (row["cpu_model"] or row["motherboard_model"] or "").strip(),
+        (row["ram_spec"] or row["memory_model"] or "").strip(),
+        (row["network_card"] or row["psu_model"] or "").strip(),
     ]
-    storage_ok = bool((row["hd_model"] or "").strip() or (row["hd_nvme_model"] or "").strip())
+    storage_ok = bool((row["storage_spec"] or "").strip() or (row["hd_model"] or "").strip() or (row["hd_nvme_model"] or "").strip())
     return "OK" if all(required) and storage_ok else "REVISAR"
 
 
@@ -992,78 +1037,84 @@ def app(environ, start_response):
                 return redirect(start_response, "/machines?msg=Sem+permissao+de+alteracao")
             data = parse_post(environ)
             machine_id = data.get("id", "").strip()
-            quantity_raw = data.get("quantity", "1").strip() or "1"
+            ram_quantity_raw = data.get("ram_quantity", "1").strip() or "1"
             try:
-                quantity = int(quantity_raw)
+                ram_quantity = int(ram_quantity_raw)
             except ValueError:
-                quantity = 1
-            if quantity < 1:
-                quantity = 1
-            memory_quantity_raw = data.get("memory_quantity", "1").strip() or "1"
+                ram_quantity = 1
+            if ram_quantity < 1:
+                ram_quantity = 1
+            storage_quantity_raw = data.get("storage_quantity", "1").strip() or "1"
             try:
-                memory_quantity = int(memory_quantity_raw)
+                storage_quantity = int(storage_quantity_raw)
             except ValueError:
-                memory_quantity = 1
-            if memory_quantity < 1:
-                memory_quantity = 1
-            hd_quantity_raw = data.get("hd_quantity", "1").strip() or "1"
+                storage_quantity = 1
+            if storage_quantity < 1:
+                storage_quantity = 1
+            monitor_quantity_raw = data.get("monitor_quantity", "1").strip() or "1"
             try:
-                hd_quantity = int(hd_quantity_raw)
+                monitor_quantity = int(monitor_quantity_raw)
             except ValueError:
-                hd_quantity = 1
-            if hd_quantity < 1:
-                hd_quantity = 1
-            hd_nvme_quantity_raw = data.get("hd_nvme_quantity", "1").strip() or "1"
-            try:
-                hd_nvme_quantity = int(hd_nvme_quantity_raw)
-            except ValueError:
-                hd_nvme_quantity = 1
-            if hd_nvme_quantity < 1:
-                hd_nvme_quantity = 1
-            in_ad_value = data.get("in_ad", "Nao").strip()
-            if in_ad_value not in ("Sim", "Nao"):
-                in_ad_value = "Nao"
-            existing_machine = None
-            if machine_id.isdigit():
-                existing_machine = conn.execute(
-                    "SELECT chassis_model, chassis_serial, chassis_invoice FROM machines WHERE id=?",
-                    (machine_id,),
-                ).fetchone()
+                monitor_quantity = 1
+            if monitor_quantity < 0:
+                monitor_quantity = 0
+            status = data.get("status", "Ativo").strip() or "Ativo"
+            if status not in ("Ativo", "Em Manutencao", "Queimado", "Baixado / Descartado"):
+                status = "Ativo"
             values = (
                 data.get("asset_tag", "").strip(),
                 data.get("hostname", "").strip(),
                 data.get("user_name", "").strip(),
                 data.get("ip_address", "").strip(),
-                in_ad_value,
-                quantity,
-                data.get("motherboard_model", "").strip(),
-                data.get("motherboard_serial", "").strip(),
-                data.get("motherboard_invoice", "").strip(),
-                (existing_machine["chassis_model"] if existing_machine and existing_machine["chassis_model"] else ""),
-                (existing_machine["chassis_serial"] if existing_machine and existing_machine["chassis_serial"] else ""),
-                (existing_machine["chassis_invoice"] if existing_machine and existing_machine["chassis_invoice"] else ""),
-                memory_quantity,
-                data.get("memory_model", "").strip(),
-                data.get("memory_serial", "").strip(),
-                data.get("memory_invoice", "").strip(),
-                hd_quantity,
-                data.get("hd_model", "").strip(),
-                data.get("hd_serial", "").strip(),
-                data.get("hd_invoice", "").strip(),
-                hd_nvme_quantity,
-                data.get("hd_nvme_model", "").strip(),
-                data.get("hd_nvme_serial", "").strip(),
-                data.get("hd_nvme_invoice", "").strip(),
-                data.get("psu_model", "").strip(),
-                data.get("psu_serial", "").strip(),
-                data.get("psu_invoice", "").strip(),
-                data.get("cooler_model", "").strip(),
-                data.get("cooler_serial", "").strip(),
-                data.get("cooler_invoice", "").strip(),
-                data.get("status", "Disponivel").strip() or "Disponivel",
+                "Nao",
+                1,
+                data.get("brand", "").strip(),
+                "",
+                "",
+                "",
+                "",
+                "",
+                ram_quantity,
+                data.get("ram_spec", "").strip(),
+                "",
+                "",
+                storage_quantity,
+                data.get("storage_spec", "").strip(),
+                "",
+                "",
+                1,
+                "",
+                "",
+                "",
+                data.get("network_card", "").strip(),
+                "",
+                "",
+                data.get("gpu_model", "").strip(),
+                "",
+                "",
+                data.get("department", "").strip(),
+                data.get("model", "").strip(),
+                data.get("serial_number", "").strip(),
+                data.get("brand", "").strip(),
+                data.get("manufacturer", "").strip(),
+                data.get("cpu_model", "").strip(),
+                data.get("ram_spec", "").strip(),
+                data.get("storage_spec", "").strip(),
+                data.get("gpu_model", "").strip(),
+                data.get("network_card", "").strip(),
+                data.get("monitor", "").strip(),
+                monitor_quantity,
+                data.get("os_name", "").strip(),
+                data.get("os_version", "").strip(),
+                data.get("mac_address", "").strip(),
+                data.get("physical_location", "").strip(),
+                status,
                 data.get("notes", "").strip(),
                 now_str(),
             )
+            if not values[0] or not values[1]:
+                conn.close()
+                return redirect(start_response, "/machines?msg=Patrimonio+e+nome+da+maquina+sao+obrigatorios")
             try:
                 if machine_id:
                     conn.execute(
@@ -1077,6 +1128,9 @@ def app(environ, start_response):
                         hd_nvme_quantity=?, hd_nvme_model=?, hd_nvme_serial=?, hd_nvme_invoice=?,
                         psu_model=?, psu_serial=?, psu_invoice=?,
                         cooler_model=?, cooler_serial=?, cooler_invoice=?,
+                        department=?, model=?, serial_number=?,
+                        brand=?, manufacturer=?, cpu_model=?, ram_spec=?, storage_spec=?, gpu_model=?, network_card=?,
+                        monitor=?, monitor_quantity=?, os_name=?, os_version=?, mac_address=?, physical_location=?,
                         status=?, notes=?, updated_at=?
                         WHERE id=?
                         """,
@@ -1095,9 +1149,12 @@ def app(environ, start_response):
                           hd_nvme_quantity, hd_nvme_model, hd_nvme_serial, hd_nvme_invoice,
                           psu_model, psu_serial, psu_invoice,
                           cooler_model, cooler_serial, cooler_invoice,
+                          department, model, serial_number,
+                          brand, manufacturer, cpu_model, ram_spec, storage_spec, gpu_model, network_card,
+                          monitor, monitor_quantity, os_name, os_version, mac_address, physical_location,
                           status, notes, updated_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         values,
                     )
@@ -1126,35 +1183,33 @@ def app(environ, start_response):
             "id": edit_data["id"] if edit_data else "",
             "asset_tag": (edit_data["asset_tag"] or "") if edit_data else "",
             "hostname": (edit_data["hostname"] or "") if edit_data else "",
+            "serial_number": (edit_data["serial_number"] or "") if edit_data else "",
+            "brand": (edit_data["brand"] or edit_data["motherboard_model"] or "") if edit_data else "",
+            "model": (edit_data["model"] or "") if edit_data else "",
+            "manufacturer": (edit_data["manufacturer"] or "") if edit_data else "",
+            "cpu_model": (edit_data["cpu_model"] or "") if edit_data else "",
+            "ram_quantity": (
+                edit_data["memory_quantity"] if (edit_data and edit_data["memory_quantity"] is not None) else 1
+            ),
+            "ram_spec": (edit_data["ram_spec"] or edit_data["memory_model"] or "") if edit_data else "",
+            "storage_quantity": (
+                edit_data["hd_quantity"] if (edit_data and edit_data["hd_quantity"] is not None) else 1
+            ),
+            "storage_spec": (edit_data["storage_spec"] or edit_data["hd_model"] or "") if edit_data else "",
+            "gpu_model": (edit_data["gpu_model"] or edit_data["cooler_model"] or "") if edit_data else "",
+            "network_card": (edit_data["network_card"] or edit_data["psu_model"] or "") if edit_data else "",
+            "monitor": (edit_data["monitor"] or "") if edit_data else "",
+            "monitor_quantity": (
+                edit_data["monitor_quantity"] if (edit_data and edit_data["monitor_quantity"] is not None) else 1
+            ),
+            "os_name": (edit_data["os_name"] or "") if edit_data else "",
+            "os_version": (edit_data["os_version"] or "") if edit_data else "",
             "user_name": (edit_data["user_name"] or "") if edit_data else "",
+            "department": (edit_data["department"] or "") if edit_data else "",
+            "physical_location": (edit_data["physical_location"] or "") if edit_data else "",
             "ip_address": (edit_data["ip_address"] or "") if edit_data else "",
-            "in_ad": (edit_data["in_ad"] or "Nao") if edit_data else "Nao",
-            "quantity": (edit_data["quantity"] or 1) if edit_data else 1,
-            "motherboard_model": (edit_data["motherboard_model"] or "") if edit_data else "",
-            "motherboard_serial": (edit_data["motherboard_serial"] or "") if edit_data else "",
-            "motherboard_invoice": (edit_data["motherboard_invoice"] or "") if edit_data else "",
-            "chassis_model": (edit_data["chassis_model"] or "") if edit_data else "",
-            "chassis_serial": (edit_data["chassis_serial"] or "") if edit_data else "",
-            "chassis_invoice": (edit_data["chassis_invoice"] or "") if edit_data else "",
-            "memory_quantity": (edit_data["memory_quantity"] or 1) if edit_data else 1,
-            "memory_model": (edit_data["memory_model"] or "") if edit_data else "",
-            "memory_serial": (edit_data["memory_serial"] or "") if edit_data else "",
-            "memory_invoice": (edit_data["memory_invoice"] or "") if edit_data else "",
-            "hd_quantity": (edit_data["hd_quantity"] or 1) if edit_data else 1,
-            "hd_model": (edit_data["hd_model"] or "") if edit_data else "",
-            "hd_serial": (edit_data["hd_serial"] or "") if edit_data else "",
-            "hd_invoice": (edit_data["hd_invoice"] or "") if edit_data else "",
-            "hd_nvme_quantity": (edit_data["hd_nvme_quantity"] or 1) if edit_data else 1,
-            "hd_nvme_model": (edit_data["hd_nvme_model"] or "") if edit_data else "",
-            "hd_nvme_serial": (edit_data["hd_nvme_serial"] or "") if edit_data else "",
-            "hd_nvme_invoice": (edit_data["hd_nvme_invoice"] or "") if edit_data else "",
-            "psu_model": (edit_data["psu_model"] or "") if edit_data else "",
-            "psu_serial": (edit_data["psu_serial"] or "") if edit_data else "",
-            "psu_invoice": (edit_data["psu_invoice"] or "") if edit_data else "",
-            "cooler_model": (edit_data["cooler_model"] or "") if edit_data else "",
-            "cooler_serial": (edit_data["cooler_serial"] or "") if edit_data else "",
-            "cooler_invoice": (edit_data["cooler_invoice"] or "") if edit_data else "",
-            "status": (edit_data["status"] or "Disponivel") if edit_data else "Disponivel",
+            "mac_address": (edit_data["mac_address"] or "") if edit_data else "",
+            "status": (edit_data["status"] or "Ativo") if edit_data else "Ativo",
             "notes": (edit_data["notes"] or "") if edit_data else "",
         }
 
@@ -1163,11 +1218,11 @@ def app(environ, start_response):
             <tr>
               <td>{r['id']}</td>
               <td>{escape(r['asset_tag'])}</td>
+              <td>{escape(r['serial_number'] or '')}</td>
               <td>{escape(r['hostname'])}</td>
               <td>{escape(r['user_name'] or '')}</td>
-              <td>{escape(r['ip_address'] or '')}</td>
-              <td>{escape(r['in_ad'] or 'Nao')}</td>
-              <td>{escape(str(r['quantity'] or 1))}</td>
+              <td>{escape(r['department'] or '')}</td>
+              <td>{escape(str(r['monitor_quantity'] or 0))}x {escape(r['monitor'] or '')}</td>
               <td>{escape(r['status'])}</td>
               <td>{escape(r['updated_at'])}</td>
               <td class=\"actions\">
@@ -1181,66 +1236,71 @@ def app(environ, start_response):
 
         form_block = f"""
         <div class=\"card\">
-          <h2>{'Editar Maquina' if edit_data else 'Nova Maquina'}</h2>
+          <h2>CADASTRO DE EQUIPAMENTO - CPU</h2>
           <form method=\"post\" action=\"/machines\">
             <input type=\"hidden\" name=\"id\" value=\"{form_data['id']}\" />
+            <h2 style=\"margin-top:14px;\">Informações Gerais</h2>
             <div class=\"grid\">
-              <div><label>Tag Patrimonio*</label><input name=\"asset_tag\" value=\"{escape(form_data['asset_tag'])}\" required /></div>
+              <div><label>Numero de Patrimonio*</label><input name=\"asset_tag\" value=\"{escape(form_data['asset_tag'])}\" required /></div>
+              <div><label>Numero de Serie</label><input name=\"serial_number\" value=\"{escape(form_data['serial_number'])}\" /></div>
+              <div><label>Marca</label><input name=\"brand\" value=\"{escape(form_data['brand'])}\" /></div>
+              <div><label>Modelo</label><input name=\"model\" value=\"{escape(form_data['model'])}\" /></div>
+              <div><label>Fabricante</label><input name=\"manufacturer\" value=\"{escape(form_data['manufacturer'])}\" /></div>
+            </div>
+
+            <h2 style=\"margin-top:14px;\">Informacoes de Hardware</h2>
+            <div class=\"grid\">
+              <div><label>Processador (CPU)</label><input name=\"cpu_model\" value=\"{escape(form_data['cpu_model'])}\" /></div>
+              <div style=\"display:grid;grid-template-columns:90px 1fr;gap:8px;\">
+                <div><label>Qtd</label><input type=\"number\" min=\"1\" name=\"ram_quantity\" value=\"{escape(str(form_data['ram_quantity']))}\" /></div>
+                <div><label>Modelo da Memoria RAM</label><input name=\"ram_spec\" value=\"{escape(form_data['ram_spec'])}\" /></div>
+              </div>
+              <div style=\"display:grid;grid-template-columns:90px 1fr;gap:8px;\">
+                <div><label>Qtd</label><input type=\"number\" min=\"1\" name=\"storage_quantity\" value=\"{escape(str(form_data['storage_quantity']))}\" /></div>
+                <div><label>Modelo do HD/SSD</label><input name=\"storage_spec\" value=\"{escape(form_data['storage_spec'])}\" /></div>
+              </div>
+              <div><label>Placa de Video</label><input name=\"gpu_model\" value=\"{escape(form_data['gpu_model'])}\" /></div>
+              <div style=\"display:grid;grid-template-columns:90px 1fr;gap:8px;\">
+                <div><label>Qtd</label><input type=\"number\" min=\"0\" name=\"monitor_quantity\" value=\"{escape(str(form_data['monitor_quantity']))}\" /></div>
+                <div><label>Modelo Monitor</label><input name=\"monitor\" value=\"{escape(form_data['monitor'])}\" /></div>
+              </div>
+            </div>
+
+            <h2 style=\"margin-top:14px;\">Sistema</h2>
+            <div class=\"grid\">
+              <div><label>Sistema Operacional</label><input name=\"os_name\" value=\"{escape(form_data['os_name'])}\" /></div>
+              <div><label>Versao do Sistema</label><input name=\"os_version\" value=\"{escape(form_data['os_version'])}\" /></div>
               <div><label>Nome da Maquina*</label><input name=\"hostname\" value=\"{escape(form_data['hostname'])}\" required /></div>
-              <div><label>Usuario da Maquina</label><input name=\"user_name\" value=\"{escape(form_data['user_name'])}\" /></div>
-              <div><label>IP na Rede</label><input name=\"ip_address\" value=\"{escape(form_data['ip_address'])}\" /></div>
+              <div><label>Endereco IP</label><input name=\"ip_address\" value=\"{escape(form_data['ip_address'])}\" /></div>
+              <div><label>MAC Address</label><input name=\"mac_address\" value=\"{escape(form_data['mac_address'])}\" /></div>
+            </div>
+
+            <h2 style=\"margin-top:14px;\">Localização</h2>
+            <div class=\"grid\">
+              <div><label>Setor / Departamento</label><input name=\"department\" value=\"{escape(form_data['department'])}\" /></div>
+              <div><label>Usuario Responsavel</label><input name=\"user_name\" value=\"{escape(form_data['user_name'])}\" /></div>
               <div>
-                <label>Esta no AD</label>
-                <select name=\"in_ad\">
-                  <option value=\"Sim\" {'selected' if form_data['in_ad'] == 'Sim' else ''}>Sim</option>
-                  <option value=\"Nao\" {'selected' if form_data['in_ad'] != 'Sim' else ''}>Nao</option>
+                <label>Localizacao Fisica</label>
+                <select name=\"physical_location\">
+                  <option value=\"Nexxus RJ\" {'selected' if form_data['physical_location'] == 'Nexxus RJ' else ''}>Nexxus RJ</option>
+                  <option value=\"Nexxus SP\" {'selected' if form_data['physical_location'] == 'Nexxus SP' else ''}>Nexxus SP</option>
                 </select>
               </div>
-              <div><label>Quantidade</label><input type=\"number\" min=\"1\" name=\"quantity\" value=\"{escape(str(form_data['quantity']))}\" /></div>
-              <div><label>Status</label><input name=\"status\" value=\"{escape(form_data['status'])}\" /></div>
             </div>
-            <h2 style=\"margin-top:14px;\">Placa mae</h2>
+
+            <h2 style=\"margin-top:14px;\">Situacao do Equipamento</h2>
             <div class=\"grid\">
-              <div><label>Placa Mae</label><input name=\"motherboard_model\" value=\"{escape(form_data['motherboard_model'])}\" /></div>
-              <div><label>Serie</label><input name=\"motherboard_serial\" value=\"{escape(form_data['motherboard_serial'])}\" /></div>
-              <div><label>Nota Fiscal</label><input name=\"motherboard_invoice\" value=\"{escape(form_data['motherboard_invoice'])}\" /></div>
+              <div><label><input type=\"radio\" name=\"status\" value=\"Ativo\" {'checked' if form_data['status'] == 'Ativo' else ''} /> Ativo</label></div>
+              <div><label><input type=\"radio\" name=\"status\" value=\"Em Manutencao\" {'checked' if form_data['status'] == 'Em Manutencao' else ''} /> Em Manutencao</label></div>
+              <div><label><input type=\"radio\" name=\"status\" value=\"Queimado\" {'checked' if form_data['status'] == 'Queimado' else ''} /> Queimado</label></div>
+              <div><label><input type=\"radio\" name=\"status\" value=\"Baixado / Descartado\" {'checked' if form_data['status'] == 'Baixado / Descartado' else ''} /> Baixado / Descartado</label></div>
             </div>
-            <h2 style=\"margin-top:14px;\">Memoria</h2>
-            <div class=\"grid\">
-              <div><label>Quantidade</label><input type=\"number\" min=\"1\" name=\"memory_quantity\" value=\"{escape(str(form_data['memory_quantity']))}\" /></div>
-              <div><label>Memoria</label><input name=\"memory_model\" value=\"{escape(form_data['memory_model'])}\" /></div>
-              <div><label>Serie</label><input name=\"memory_serial\" value=\"{escape(form_data['memory_serial'])}\" /></div>
-              <div><label>Nota Fiscal</label><input name=\"memory_invoice\" value=\"{escape(form_data['memory_invoice'])}\" /></div>
-            </div>
-            <h2 style=\"margin-top:14px;\">HD Mecanico</h2>
-            <div class=\"grid\">
-              <div><label>Quantidade</label><input type=\"number\" min=\"1\" name=\"hd_quantity\" value=\"{escape(str(form_data['hd_quantity']))}\" /></div>
-              <div><label>HD Mecanico</label><input name=\"hd_model\" value=\"{escape(form_data['hd_model'])}\" /></div>
-              <div><label>Serie</label><input name=\"hd_serial\" value=\"{escape(form_data['hd_serial'])}\" /></div>
-            </div>
-            <h2 style=\"margin-top:14px;\">HD NVME</h2>
-            <div class=\"grid\">
-              <div><label>Quantidade</label><input type=\"number\" min=\"1\" name=\"hd_nvme_quantity\" value=\"{escape(str(form_data['hd_nvme_quantity']))}\" /></div>
-              <div><label>HD NVME</label><input name=\"hd_nvme_model\" value=\"{escape(form_data['hd_nvme_model'])}\" /></div>
-              <div><label>Serie</label><input name=\"hd_nvme_serial\" value=\"{escape(form_data['hd_nvme_serial'])}\" /></div>
-              <div><label>Nota Fiscal</label><input name=\"hd_nvme_invoice\" value=\"{escape(form_data['hd_nvme_invoice'])}\" /></div>
-            </div>
-            <h2 style=\"margin-top:14px;\">Fonte</h2>
-            <div class=\"grid\">
-              <div><label>Fonte</label><input name=\"psu_model\" value=\"{escape(form_data['psu_model'])}\" /></div>
-              <div><label>Serie</label><input name=\"psu_serial\" value=\"{escape(form_data['psu_serial'])}\" /></div>
-              <div><label>Nota Fiscal</label><input name=\"psu_invoice\" value=\"{escape(form_data['psu_invoice'])}\" /></div>
-            </div>
-            <h2 style=\"margin-top:14px;\">Cooler</h2>
-            <div class=\"grid\">
-              <div><label>Cooler</label><input name=\"cooler_model\" value=\"{escape(form_data['cooler_model'])}\" /></div>
-              <div><label>Serie</label><input name=\"cooler_serial\" value=\"{escape(form_data['cooler_serial'])}\" /></div>
-              <div><label>Nota Fiscal</label><input name=\"cooler_invoice\" value=\"{escape(form_data['cooler_invoice'])}\" /></div>
-            </div>
+
             <label style=\"margin-top:10px\">Observacoes</label><textarea name=\"notes\">{escape(form_data['notes'])}</textarea>
             <div style=\"margin-top:12px\" class=\"actions\">
-              <button type=\"submit\">Salvar</button>
-              <a href=\"/machines\" style=\"padding-top:10px\">Limpar</a>
+              <button type=\"submit\">SALVAR</button>
+              <a href=\"/machines\" style=\"padding-top:10px\">LIMPAR</a>
+              <a href=\"/dashboard\" style=\"padding-top:10px\">CANCELAR</a>
             </div>
           </form>
         </div>
@@ -1253,7 +1313,7 @@ def app(environ, start_response):
         <div class=\"card\">
           <h2>Maquinas cadastradas</h2>
           <table>
-            <thead><tr><th>ID</th><th>Patrimonio</th><th>Nome da maquina</th><th>Usuario</th><th>IP</th><th>AD</th><th>Qtd</th><th>Status</th><th>Atualizado em</th><th>Acoes</th></tr></thead>
+            <thead><tr><th>ID</th><th>Patrimonio</th><th>Serie</th><th>Nome da maquina</th><th>Responsavel</th><th>Setor</th><th>Monitor</th><th>Status</th><th>Atualizado em</th><th>Acoes</th></tr></thead>
             <tbody>{rows_html}</tbody>
           </table>
         </div>
@@ -1531,6 +1591,7 @@ def app(environ, start_response):
                 """
                 SELECT
                   id, user_name,
+                  cpu_model, ram_spec, storage_spec, gpu_model, network_card,
                   motherboard_model, motherboard_serial, motherboard_invoice,
                   chassis_model, chassis_serial, chassis_invoice,
                   memory_quantity, memory_model,
@@ -1548,10 +1609,10 @@ def app(environ, start_response):
                 <tr class="{'alert-row' if machine_report_status(r) != 'OK' else ''}">
                   <td><span class="pill {'ok' if machine_report_status(r) == 'OK' else 'warn'}">{machine_report_status(r)}</span></td>
                   <td>{escape(r['user_name'] or '')}</td>
-                  <td>{escape(r['motherboard_model'] or '')}</td>
-                  <td>{escape((str(r['memory_quantity']) + 'x ' if (r['memory_quantity'] or 0) > 0 else '') + (r['memory_model'] or ''))}</td>
-                  <td>{escape(r['chassis_model'] or '')}</td>
-                  <td>{escape(r['psu_model'] or '')}</td>
+                  <td>{escape(r['cpu_model'] or r['motherboard_model'] or '')}</td>
+                  <td>{escape(r['ram_spec'] or (str(r['memory_quantity']) + 'x ' if (r['memory_quantity'] or 0) > 0 else '') + (r['memory_model'] or ''))}</td>
+                  <td>{escape(r['gpu_model'] or r['chassis_model'] or '')}</td>
+                  <td>{escape(r['network_card'] or r['psu_model'] or '')}</td>
                   <td>{escape(machine_storage_label(r))}</td>
                 </tr>
                 """
@@ -1566,7 +1627,7 @@ def app(environ, start_response):
               </div>
               <div class="report-sheet">
                 <table>
-                  <thead><tr><th>Status</th><th>Usuario</th><th>Placa Mae</th><th>Memoria</th><th>Gabinete</th><th>Fonte</th><th>Armazenamento</th></tr></thead>
+                  <thead><tr><th>Status</th><th>Usuario</th><th>CPU</th><th>Memoria</th><th>Video</th><th>Rede</th><th>Armazenamento</th></tr></thead>
                   <tbody>{rows_html}</tbody>
                 </table>
               </div>
