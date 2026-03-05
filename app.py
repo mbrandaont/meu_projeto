@@ -342,6 +342,12 @@ def render_page(
         </nav>
         """
     alert_html = f"<p class='alert'>{escape(alert)}</p>" if alert else ""
+    shell_content = f"""
+    <section class=\"screen-shell\">
+      <div class=\"screen-topbar\"><strong>Gestão de Ativos</strong><span>| {escape(title)}</span></div>
+      <div class=\"screen-body\">{alert_html}{content}</div>
+    </section>
+    """
     return f"""<!doctype html>
 <html lang=\"pt-BR\">
 <head>
@@ -368,8 +374,30 @@ def render_page(
     }}
     nav .brand:hover {{ text-decoration:none; }}
     nav .brand img {{ height:52px; width:auto; display:block; max-width:none; object-fit:contain; }}
-    .container {{ max-width:1100px; margin:28px auto; padding:0 14px; }}
-    .card {{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; box-shadow:0 10px 30px rgba(16,24,39,0.05); margin-bottom:16px; }}
+    .container {{ max-width:1020px; margin:28px auto; padding:0 14px; }}
+    .screen-shell {{
+      border:1px solid #b6c7df;
+      border-radius:14px;
+      overflow:hidden;
+      box-shadow:0 16px 30px rgba(15, 23, 42, 0.12);
+      background:linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    }}
+    .screen-topbar {{
+      padding:14px 20px;
+      color:#eaf2ff;
+      background:linear-gradient(120deg, #2f8fd0 0%, #1f4d87 60%, #1a2f5f 100%);
+      font-size:20px;
+      display:flex;
+      gap:10px;
+      align-items:center;
+    }}
+    .screen-topbar strong {{ color:#ffffff; }}
+    .screen-topbar span {{ opacity:0.92; font-weight:500; }}
+    .screen-body {{ padding:16px; }}
+    .card {{ background:var(--card); border:1px solid #b6c7df; border-radius:14px; padding:16px; margin-bottom:16px; box-shadow:
+        0 12px 22px rgba(15, 23, 42, 0.08),
+        0 2px 0 rgba(255, 255, 255, 0.9) inset,
+        0 -2px 0 rgba(148, 163, 184, 0.25) inset; }}
     .page-maquinas .card {{
       border:1px solid #b6c7df;
       border-radius:14px;
@@ -381,9 +409,59 @@ def render_page(
         -2px 0 0 rgba(148, 163, 184, 0.18) inset;
       background:linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
     }}
-    .page-maquinas .card h2 {{
-      padding-bottom:8px;
-      border-bottom:1px solid #d8e3f2;
+    .machine-form {{ display:flex; flex-direction:column; gap:14px; }}
+    .machine-section {{ padding-bottom:4px; border-bottom:1px solid #dbe3ed; }}
+    .machine-section:last-of-type {{ border-bottom:none; }}
+    .machine-sec-title {{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      margin-bottom:10px;
+      font-size:14px;
+      color:#334155;
+    }}
+    .machine-sec-title strong {{
+      font-size:19px;
+      color:#111827;
+      font-weight:700;
+    }}
+    .machine-grid-3 {{ display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; }}
+    .machine-qtd-pair {{ display:grid; grid-template-columns:84px 1fr; gap:8px; }}
+    .machine-status-grid {{ display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; margin-top:6px; }}
+    .machine-status-card {{
+      border:1px solid #cbd5e1;
+      border-radius:10px;
+      background:#f8fafc;
+      padding:12px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-size:14px;
+      color:#1f2937;
+      cursor:pointer;
+    }}
+    .machine-status-card input[type=radio] {{ width:auto; margin:0; }}
+    .machine-status-card.active {{
+      border-color:#3b82f6;
+      background:#dbeafe;
+      box-shadow:inset 0 0 0 1px #93c5fd;
+    }}
+    .machine-actions {{ justify-content:flex-end; margin-top:8px; }}
+    .machine-link-btn {{
+      display:inline-flex;
+      align-items:center;
+      padding:8px 18px;
+      border-radius:10px;
+      border:1px solid #9ca3af;
+      text-decoration:none;
+      font-size:14px;
+      color:#4b5563 !important;
+      background:#f8fafc;
+    }}
+    .machine-link-btn.warn {{
+      border-color:#eab308;
+      color:#a16207 !important;
+      background:#fffbeb;
     }}
     h1,h2 {{ margin:0 0 12px; }}
     h1 {{ font-size:28px; }}
@@ -450,12 +528,15 @@ def render_page(
     @media (max-width: 700px) {{
       .container {{ margin:16px auto; }}
       table {{ display:block; overflow:auto; white-space:nowrap; }}
+      .machine-grid-3 {{ grid-template-columns:1fr; }}
+      .machine-status-grid {{ grid-template-columns:1fr; }}
+      .screen-topbar {{ font-size:18px; flex-direction:column; align-items:flex-start; }}
     }}
   </style>
 </head>
 <body class=\"{page_class}\">
   {nav}
-  <main class=\"container\">{alert_html}{content}</main>
+  <main class=\"container\">{shell_content}</main>
 </body>
 </html>""".encode("utf-8")
 
@@ -1236,71 +1317,80 @@ def app(environ, start_response):
 
         form_block = f"""
         <div class=\"card\">
-          <h2>CADASTRO DE EQUIPAMENTO - CPU</h2>
-          <form method=\"post\" action=\"/machines\">
+          <form method=\"post\" action=\"/machines\" class=\"machine-form\">
             <input type=\"hidden\" name=\"id\" value=\"{form_data['id']}\" />
-            <h2 style=\"margin-top:14px;\">Informações Gerais</h2>
-            <div class=\"grid\">
-              <div><label>Numero de Patrimonio*</label><input name=\"asset_tag\" value=\"{escape(form_data['asset_tag'])}\" required /></div>
-              <div><label>Numero de Serie</label><input name=\"serial_number\" value=\"{escape(form_data['serial_number'])}\" /></div>
-              <div><label>Marca</label><input name=\"brand\" value=\"{escape(form_data['brand'])}\" /></div>
-              <div><label>Modelo</label><input name=\"model\" value=\"{escape(form_data['model'])}\" /></div>
-              <div><label>Fabricante</label><input name=\"manufacturer\" value=\"{escape(form_data['manufacturer'])}\" /></div>
-            </div>
-
-            <h2 style=\"margin-top:14px;\">Informacoes de Hardware</h2>
-            <div class=\"grid\">
-              <div><label>Processador (CPU)</label><input name=\"cpu_model\" value=\"{escape(form_data['cpu_model'])}\" /></div>
-              <div style=\"display:grid;grid-template-columns:90px 1fr;gap:8px;\">
-                <div><label>Qtd</label><input type=\"number\" min=\"1\" name=\"ram_quantity\" value=\"{escape(str(form_data['ram_quantity']))}\" /></div>
-                <div><label>Modelo da Memoria RAM</label><input name=\"ram_spec\" value=\"{escape(form_data['ram_spec'])}\" /></div>
+            <section class=\"machine-section\">
+              <div class=\"machine-sec-title\"><span>🧾</span><strong>Informações Gerais</strong></div>
+              <div class=\"machine-grid-3\">
+                <div><label>Número de Patrimônio*</label><input name=\"asset_tag\" value=\"{escape(form_data['asset_tag'])}\" required /></div>
+                <div><label>Número de Série</label><input name=\"serial_number\" value=\"{escape(form_data['serial_number'])}\" /></div>
+                <div><label>Nome da Máquina*</label><input name=\"hostname\" value=\"{escape(form_data['hostname'])}\" required /></div>
+                <div><label>Marca</label><input name=\"brand\" value=\"{escape(form_data['brand'])}\" /></div>
+                <div><label>Modelo</label><input name=\"model\" value=\"{escape(form_data['model'])}\" /></div>
+                <div><label>Fabricante</label><input name=\"manufacturer\" value=\"{escape(form_data['manufacturer'])}\" /></div>
               </div>
-              <div style=\"display:grid;grid-template-columns:90px 1fr;gap:8px;\">
-                <div><label>Qtd</label><input type=\"number\" min=\"1\" name=\"storage_quantity\" value=\"{escape(str(form_data['storage_quantity']))}\" /></div>
-                <div><label>Modelo do HD/SSD</label><input name=\"storage_spec\" value=\"{escape(form_data['storage_spec'])}\" /></div>
+            </section>
+
+            <section class=\"machine-section\">
+              <div class=\"machine-sec-title\"><span>🖥️</span><strong>Especificações de Hardware</strong></div>
+              <div class=\"machine-grid-3\">
+                <div><label>Processador (CPU)</label><input name=\"cpu_model\" value=\"{escape(form_data['cpu_model'])}\" /></div>
+                <div class=\"machine-qtd-pair\">
+                  <div><label>Qtd</label><input type=\"number\" min=\"1\" name=\"ram_quantity\" value=\"{escape(str(form_data['ram_quantity']))}\" /></div>
+                  <div><label>Modelo da Memória RAM</label><input name=\"ram_spec\" value=\"{escape(form_data['ram_spec'])}\" /></div>
+                </div>
+                <div class=\"machine-qtd-pair\">
+                  <div><label>Qtd</label><input type=\"number\" min=\"1\" name=\"storage_quantity\" value=\"{escape(str(form_data['storage_quantity']))}\" /></div>
+                  <div><label>Modelo do HD/SSD</label><input name=\"storage_spec\" value=\"{escape(form_data['storage_spec'])}\" /></div>
+                </div>
+                <div><label>Placa de Vídeo</label><input name=\"gpu_model\" value=\"{escape(form_data['gpu_model'])}\" /></div>
+                <div class=\"machine-qtd-pair\">
+                  <div><label>Qtd</label><input type=\"number\" min=\"0\" name=\"monitor_quantity\" value=\"{escape(str(form_data['monitor_quantity']))}\" /></div>
+                  <div><label>Modelo Monitor</label><input name=\"monitor\" value=\"{escape(form_data['monitor'])}\" /></div>
+                </div>
               </div>
-              <div><label>Placa de Video</label><input name=\"gpu_model\" value=\"{escape(form_data['gpu_model'])}\" /></div>
-              <div style=\"display:grid;grid-template-columns:90px 1fr;gap:8px;\">
-                <div><label>Qtd</label><input type=\"number\" min=\"0\" name=\"monitor_quantity\" value=\"{escape(str(form_data['monitor_quantity']))}\" /></div>
-                <div><label>Modelo Monitor</label><input name=\"monitor\" value=\"{escape(form_data['monitor'])}\" /></div>
+            </section>
+
+            <section class=\"machine-section\">
+              <div class=\"machine-sec-title\"><span>🌐</span><strong>Configurações de Rede & Sistema</strong></div>
+              <div class=\"machine-grid-3\">
+                <div><label>Sistema Operacional</label><input name=\"os_name\" value=\"{escape(form_data['os_name'])}\" /></div>
+                <div><label>Versão do Sistema</label><input name=\"os_version\" value=\"{escape(form_data['os_version'])}\" /></div>
+                <div><label>Endereço IP</label><input name=\"ip_address\" value=\"{escape(form_data['ip_address'])}\" /></div>
+                <div><label>MAC Address</label><input name=\"mac_address\" value=\"{escape(form_data['mac_address'])}\" /></div>
               </div>
-            </div>
+            </section>
 
-            <h2 style=\"margin-top:14px;\">Sistema</h2>
-            <div class=\"grid\">
-              <div><label>Sistema Operacional</label><input name=\"os_name\" value=\"{escape(form_data['os_name'])}\" /></div>
-              <div><label>Versao do Sistema</label><input name=\"os_version\" value=\"{escape(form_data['os_version'])}\" /></div>
-              <div><label>Nome da Maquina*</label><input name=\"hostname\" value=\"{escape(form_data['hostname'])}\" required /></div>
-              <div><label>Endereco IP</label><input name=\"ip_address\" value=\"{escape(form_data['ip_address'])}\" /></div>
-              <div><label>MAC Address</label><input name=\"mac_address\" value=\"{escape(form_data['mac_address'])}\" /></div>
-            </div>
-
-            <h2 style=\"margin-top:14px;\">Localização</h2>
-            <div class=\"grid\">
-              <div><label>Setor / Departamento</label><input name=\"department\" value=\"{escape(form_data['department'])}\" /></div>
-              <div><label>Usuario Responsavel</label><input name=\"user_name\" value=\"{escape(form_data['user_name'])}\" /></div>
-              <div>
-                <label>Localizacao Fisica</label>
-                <select name=\"physical_location\">
-                  <option value=\"Nexxus RJ\" {'selected' if form_data['physical_location'] == 'Nexxus RJ' else ''}>Nexxus RJ</option>
-                  <option value=\"Nexxus SP\" {'selected' if form_data['physical_location'] == 'Nexxus SP' else ''}>Nexxus SP</option>
-                </select>
+            <section class=\"machine-section\">
+              <div class=\"machine-sec-title\"><span>📍</span><strong>Localização & Atribuição</strong></div>
+              <div class=\"machine-grid-3\">
+                <div>
+                  <label>Localização Física</label>
+                  <select name=\"physical_location\">
+                    <option value=\"Nexxus RJ\" {'selected' if form_data['physical_location'] == 'Nexxus RJ' else ''}>Nexxus RJ</option>
+                    <option value=\"Nexxus SP\" {'selected' if form_data['physical_location'] == 'Nexxus SP' else ''}>Nexxus SP</option>
+                  </select>
+                </div>
+                <div><label>Setor / Departamento</label><input name=\"department\" value=\"{escape(form_data['department'])}\" /></div>
+                <div><label>Usuário Responsável</label><input name=\"user_name\" value=\"{escape(form_data['user_name'])}\" /></div>
               </div>
-            </div>
+            </section>
 
-            <h2 style=\"margin-top:14px;\">Situacao do Equipamento</h2>
-            <div class=\"grid\">
-              <div><label><input type=\"radio\" name=\"status\" value=\"Ativo\" {'checked' if form_data['status'] == 'Ativo' else ''} /> Ativo</label></div>
-              <div><label><input type=\"radio\" name=\"status\" value=\"Em Manutencao\" {'checked' if form_data['status'] == 'Em Manutencao' else ''} /> Em Manutencao</label></div>
-              <div><label><input type=\"radio\" name=\"status\" value=\"Queimado\" {'checked' if form_data['status'] == 'Queimado' else ''} /> Queimado</label></div>
-              <div><label><input type=\"radio\" name=\"status\" value=\"Baixado / Descartado\" {'checked' if form_data['status'] == 'Baixado / Descartado' else ''} /> Baixado / Descartado</label></div>
-            </div>
+            <section class=\"machine-section\">
+              <div class=\"machine-sec-title\"><span>✅</span><strong>Situação Atual</strong></div>
+              <div class=\"machine-status-grid\">
+                <label class=\"machine-status-card {'active' if form_data['status'] == 'Ativo' else ''}\"><input type=\"radio\" name=\"status\" value=\"Ativo\" {'checked' if form_data['status'] == 'Ativo' else ''} />✅ Ativo</label>
+                <label class=\"machine-status-card {'active' if form_data['status'] == 'Em Manutencao' else ''}\"><input type=\"radio\" name=\"status\" value=\"Em Manutencao\" {'checked' if form_data['status'] == 'Em Manutencao' else ''} />🔧 Manutenção</label>
+                <label class=\"machine-status-card {'active' if form_data['status'] == 'Queimado' else ''}\"><input type=\"radio\" name=\"status\" value=\"Queimado\" {'checked' if form_data['status'] == 'Queimado' else ''} />🔥 Queimado</label>
+                <label class=\"machine-status-card {'active' if form_data['status'] == 'Baixado / Descartado' else ''}\"><input type=\"radio\" name=\"status\" value=\"Baixado / Descartado\" {'checked' if form_data['status'] == 'Baixado / Descartado' else ''} />🗑️ Descartado</label>
+              </div>
+            </section>
 
-            <label style=\"margin-top:10px\">Observacoes</label><textarea name=\"notes\">{escape(form_data['notes'])}</textarea>
-            <div style=\"margin-top:12px\" class=\"actions\">
+            <label>Observações</label><textarea name=\"notes\">{escape(form_data['notes'])}</textarea>
+            <div class=\"actions machine-actions\">
               <button type=\"submit\">SALVAR</button>
-              <a href=\"/machines\" style=\"padding-top:10px\">LIMPAR</a>
-              <a href=\"/dashboard\" style=\"padding-top:10px\">CANCELAR</a>
+              <a href=\"/machines\" class=\"machine-link-btn warn\">LIMPAR</a>
+              <a href=\"/dashboard\" class=\"machine-link-btn\">CANCELAR</a>
             </div>
           </form>
         </div>
